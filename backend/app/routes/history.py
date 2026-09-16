@@ -4,6 +4,7 @@ from httpx import HTTPStatusError
 from pydantic import BaseModel
 from ..config import get_settings
 from ..services.data_provider import create_data_provider
+from ..services.schwab_client import SchwabAuthError
 from ..services.gex_calculator import compute_gex
 from ..services.history_service import get_history_service
 
@@ -23,6 +24,8 @@ async def save_snapshot(symbol: str):
     try:
         provider = create_data_provider(settings.data_source)
         chain = await provider.get_options_chain(symbol.upper())
+    except SchwabAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
@@ -65,6 +68,8 @@ async def compare_gex(
     try:
         provider = create_data_provider(settings.data_source)
         chain = await provider.get_options_chain(symbol.upper())
+    except SchwabAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 

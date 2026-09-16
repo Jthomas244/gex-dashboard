@@ -8,6 +8,11 @@ from ..config import get_settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+def _text_of(response) -> str:
+    """Join the text blocks; adaptive thinking puts a thinking block first."""
+    return "".join(b.text for b in response.content if b.type == "text").strip()
+
 # Simple in-memory cache: key -> (timestamp, result)
 _cache: dict[str, tuple[float, str]] = {}
 CACHE_TTL = 300  # 5 minutes
@@ -85,12 +90,14 @@ Top strikes by GEX:
     try:
         client = Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
-            model="claude-sonnet-5",
+            model="claude-opus-5",
             max_tokens=1500,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
+            # SDK 0.52 predates output_config; pass it raw. Low effort — short explanatory prose.
+            extra_body={"output_config": {"effort": "low"}},
         )
-        interpretation = response.content[0].text
+        interpretation = _text_of(response)
         _cache[cache_key] = (now, interpretation)
         return InterpretResponse(interpretation=interpretation)
     except Exception as e:

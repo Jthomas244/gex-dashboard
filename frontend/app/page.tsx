@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { GexResponse, ExpirationFilter } from "@/lib/types";
-import { fetchGex, saveSnapshot, ComparisonData } from "@/lib/api";
+import { fetchGex, fetchHealth, saveSnapshot, ComparisonData, SchwabTokenStatus } from "@/lib/api";
 import TopBar from "@/components/TopBar";
 import RegimeIndicator from "@/components/RegimeIndicator";
 import GexBarChart from "@/components/GexBarChart";
@@ -49,6 +49,14 @@ export default function Dashboard() {
 
   // V2b state
   const [comparison, setComparison] = useState<ComparisonData | null>(null);
+  const [tokenStatus, setTokenStatus] = useState<SchwabTokenStatus | null>(null);
+
+  // Token lifecycle from the backend (refreshed alongside data loads)
+  const loadHealth = useCallback(() => {
+    fetchHealth()
+      .then((h) => setTokenStatus(h.schwab_token ?? null))
+      .catch(() => setTokenStatus(null));
+  }, []);
 
   // Read persisted onboarding flags on mount
   useEffect(() => {
@@ -101,7 +109,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadHealth();
+  }, [loadData, loadHealth]);
 
   // Auto-save snapshot once per day when live data loads
   useEffect(() => {
@@ -136,6 +145,7 @@ export default function Dashboard() {
           onLearnToggle={toggleLearn}
           learnOpen={learnOpen}
           onTutorial={() => setTutorialOpen(true)}
+          tokenStatus={tokenStatus}
         />
 
         {/* Secondary toolbar */}
@@ -155,6 +165,11 @@ export default function Dashboard() {
               <div>
                 <div className="text-fg font-medium mb-1">Couldn&apos;t load {symbol}</div>
                 <p className="text-[13.5px] text-fg-2 leading-relaxed">{error}</p>
+                {/re-authorize|refresh token/i.test(error) && (
+                  <pre className="mt-3 rounded-lg border border-line bg-black/30 px-3 py-2 text-[12px] font-data text-fg overflow-x-auto">
+                    cd backend && python -m app.auth_flow
+                  </pre>
+                )}
                 <button onClick={loadData} className="btn mt-3">
                   Try again
                 </button>

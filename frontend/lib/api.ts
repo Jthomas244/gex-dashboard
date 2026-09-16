@@ -2,6 +2,25 @@ import { GexResponse, ExpirationFilter } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export interface SchwabTokenStatus {
+  state: "ok" | "expiring" | "expired" | "unknown";
+  issued_at: string | null;
+  expires_at: string | null;
+  days_remaining: number | null;
+}
+
+export interface HealthResponse {
+  status: string;
+  data_source: string;
+  schwab_token?: SchwabTokenStatus;
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${API_URL}/api/health`);
+  if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchGex(
   symbol: string,
   expirationFilter: ExpirationFilter = "all"

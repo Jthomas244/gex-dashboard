@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from httpx import HTTPStatusError
 from ..config import get_settings
 from ..services.data_provider import create_data_provider
+from ..services.schwab_client import SchwabAuthError
 from ..services.gex_calculator import compute_gex
 from ..models.gex import GexResponse
 
@@ -19,20 +20,19 @@ async def get_gex(
 
     try:
         provider = create_data_provider(settings.data_source)
+    except SchwabAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
     try:
         chain = await provider.get_options_chain(symbol.upper())
+    except SchwabAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"No data available for {symbol.upper()}")
     except HTTPStatusError as e:
         logger.error(f"Schwab API error: {e.response.status_code} — {e.response.text}")
-        if e.response.status_code == 401:
-            raise HTTPException(
-                status_code=401,
-                detail="Schwab token expired. Re-run auth flow: python -m app.auth_flow"
-            )
         raise HTTPException(
             status_code=502,
             detail=f"Schwab API error: {e.response.status_code}"

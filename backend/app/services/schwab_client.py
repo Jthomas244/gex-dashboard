@@ -24,6 +24,13 @@ SYMBOL_MAP = {
 }
 
 
+REAUTH_HINT = "Re-authorize with: cd backend && python -m app.auth_flow"
+
+
+class SchwabAuthError(RuntimeError):
+    """Refresh token is missing, invalid, or expired — a new OAuth login is required."""
+
+
 class SchwabClient:
     def __init__(self, app_key: str, app_secret: str):
         self.app_key = app_key
@@ -68,7 +75,7 @@ class SchwabClient:
     async def refresh_access_token(self) -> dict:
         """Refresh the access token using the refresh token."""
         if not self.refresh_token:
-            raise RuntimeError("No refresh token available. Re-run OAuth flow.")
+            raise SchwabAuthError(f"No Schwab refresh token available. {REAUTH_HINT}")
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -82,6 +89,11 @@ class SchwabClient:
                     "refresh_token": self.refresh_token,
                 },
             )
+            if resp.status_code in (400, 401):
+                # Schwab returns invalid_grant once the 7-day refresh token lapses
+                raise SchwabAuthError(
+                    f"Schwab refresh token is invalid or expired (they last 7 days). {REAUTH_HINT}"
+                )
             resp.raise_for_status()
             tokens = resp.json()
             self.access_token = tokens["access_token"]

@@ -1,7 +1,7 @@
 "use client";
 
 import SymbolSelector from "./SymbolSelector";
-import { formatTimestamp } from "@/lib/api";
+import { formatTimestamp, SchwabTokenStatus } from "@/lib/api";
 
 interface Props {
   symbol: string;
@@ -13,6 +13,24 @@ interface Props {
   onLearnToggle: () => void;
   learnOpen: boolean;
   onTutorial: () => void;
+  tokenStatus?: SchwabTokenStatus | null;
+}
+
+/** Schwab refresh tokens die after 7 days — warn before the dashboard goes dark. */
+function TokenWarning({ status }: { status: SchwabTokenStatus }) {
+  if (status.state !== "expiring" && status.state !== "expired") return null;
+  const expired = status.state === "expired";
+  const days = status.days_remaining ?? 0;
+  const when = days < 1 ? `${Math.max(1, Math.round(days * 24))}h` : `${Math.round(days)}d`;
+  return (
+    <span
+      className={`pill ${expired ? "text-neg border-neg/40 bg-neg/10" : "text-flip border-flip/40 bg-flip/10"}`}
+      title="Schwab refresh tokens last 7 days. Run: cd backend && python -m app.auth_flow"
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${expired ? "bg-neg" : "bg-flip"}`} />
+      {expired ? "Schwab token expired · re-auth" : `Schwab token expires in ${when}`}
+    </span>
+  );
 }
 
 function Logo() {
@@ -42,6 +60,7 @@ export default function TopBar({
   onLearnToggle,
   learnOpen,
   onTutorial,
+  tokenStatus,
 }: Props) {
   const live = dataSource === "schwab";
   return (
@@ -67,6 +86,7 @@ export default function TopBar({
             />
             {live ? "Live" : "Sample"}
           </span>
+          {tokenStatus && <TokenWarning status={tokenStatus} />}
           {timestamp && (
             <span className="hidden sm:inline text-[11px] text-fg-3 font-data">
               {formatTimestamp(timestamp)}

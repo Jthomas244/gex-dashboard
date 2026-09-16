@@ -8,6 +8,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _text_of(response) -> str:
+    """Join the text blocks; adaptive thinking puts a thinking block first."""
+    return "".join(b.text for b in response.content if b.type == "text").strip()
+
+
 class CurrentData(BaseModel):
     symbol: str
     spot_price: float
@@ -59,12 +64,14 @@ User's question: {req.question}"""
     try:
         client = Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
-            model="claude-sonnet-5",
+            model="claude-opus-5",
             max_tokens=1000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
+            # SDK 0.52 predates output_config; pass it raw. Low effort — short explanatory prose.
+            extra_body={"output_config": {"effort": "low"}},
         )
-        return ScenarioResponse(answer=response.content[0].text)
+        return ScenarioResponse(answer=_text_of(response))
     except Exception as e:
         logger.error(f"Anthropic API error: {e}")
         raise HTTPException(status_code=502, detail=f"LLM service error: {str(e)}")

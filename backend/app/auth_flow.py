@@ -12,13 +12,20 @@ This will:
 4. Copy the FULL URL from your browser's address bar and paste it here
 5. The script extracts the auth code and exchanges it for tokens
 6. Tokens are saved to backend/.env.local
+
+Schwab refresh tokens are valid for 7 days; the dashboard shows a warning
+when one is about to expire. Re-run this script to get a fresh one.
 """
 
 import asyncio
 import re
 import sys
+import webbrowser
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+
+import httpx
 
 from .config import get_settings
 from .services.schwab_client import SchwabClient, DEFAULT_REDIRECT_URI
@@ -64,9 +71,10 @@ async def run_auth_flow():
     print("  SCHWAB API — OAuth Authorization Flow")
     print("=" * 60)
     print()
-    print("Step 1: Open this URL in your browser:\n")
+    print("Step 1: Log in at this URL (opening it in your browser):\n")
     print(f"  {auth_url}")
     print()
+    webbrowser.open(auth_url)
     print("Step 2: Log in to your Schwab account and click 'Allow'.")
     print()
     print("Step 3: You'll be redirected to a page that won't load.")
@@ -74,6 +82,8 @@ async def run_auth_flow():
     print("        browser's address bar.")
     print()
 
+    print("        Auth codes expire in ~30 seconds — paste promptly.")
+    print()
     callback_url = input("Step 4: Paste the callback URL here:\n> ").strip()
 
     # Extract the authorization code from the callback URL
@@ -97,6 +107,10 @@ async def run_auth_flow():
 
     try:
         tokens = await client.exchange_code(code, DEFAULT_REDIRECT_URI)
+    except httpx.HTTPStatusError as e:
+        print(f"\nERROR: Token exchange failed: {e.response.status_code} {e.response.text}")
+        print("Auth codes are single-use and expire in ~30s — re-run and paste a fresh URL.")
+        sys.exit(1)
     except Exception as e:
         print(f"\nERROR: Token exchange failed: {e}")
         sys.exit(1)
@@ -108,13 +122,14 @@ async def run_auth_flow():
     # Save tokens to .env.local
     update_env_file("SCHWAB_ACCESS_TOKEN", access_token)
     update_env_file("SCHWAB_REFRESH_TOKEN", refresh_token)
+    update_env_file("SCHWAB_TOKEN_ISSUED_AT", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     update_env_file("DATA_SOURCE", "schwab")
 
     print("\n" + "=" * 60)
     print("  SUCCESS — Tokens saved to backend/.env.local")
     print("=" * 60)
     print(f"\n  Access token expires in: {expires_in} seconds")
-    print(f"  Refresh token: {'received' if refresh_token else 'not provided'}")
+    print(f"  Refresh token: {'received — valid 7 days' if refresh_token else 'not provided'}")
     print(f"  DATA_SOURCE set to: schwab")
     print(f"\n  Restart the backend to use live data:")
     print(f"  uvicorn app.main:app --reload")

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..models.options import OptionsChain, OptionContract
-from .schwab_client import SchwabClient
+from .schwab_client import SchwabClient, SchwabAuthError, REAUTH_HINT
 
 logger = logging.getLogger(__name__)
 
@@ -175,11 +175,8 @@ def create_data_provider(data_source: str) -> DataProvider:
             _schwab_client = SchwabClient(settings.schwab_app_key, settings.schwab_app_secret)
             _schwab_client.access_token = settings.schwab_access_token or None
             _schwab_client.refresh_token = settings.schwab_refresh_token or None
-            if not _schwab_client.access_token:
-                raise RuntimeError(
-                    "No SCHWAB_ACCESS_TOKEN set. Run the auth flow first: "
-                    "python -m app.auth_flow"
-                )
+            if not _schwab_client.refresh_token:
+                raise SchwabAuthError(f"No Schwab tokens set. {REAUTH_HINT}")
         return SchwabDataProvider(_schwab_client)
     else:
         raise ValueError(f"Unknown data source: {data_source}")

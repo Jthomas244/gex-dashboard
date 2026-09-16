@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     schwab_app_secret: str = ""
     schwab_access_token: str = ""
     schwab_refresh_token: str = ""
+    schwab_token_issued_at: str = ""  # ISO timestamp written by auth_flow; refresh tokens last 7 days
     anthropic_api_key: str = ""
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"]
 
