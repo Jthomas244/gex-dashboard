@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { GexResponse } from "@/lib/types";
-import { fetchInterpretation, InterpretRequest } from "@/lib/api";
+import { streamInterpretation, InterpretRequest } from "@/lib/api";
 
 interface Props {
   data: GexResponse;
@@ -13,7 +13,9 @@ export default function InterpretationPanel({ data, expirationFilter }: Props) {
   const [interpretation, setInterpretation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streaming, setStreaming] = useState(false);
   const lastKeyRef = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
 
   const buildRequest = useCallback((): InterpretRequest => {
     const sortedStrikes = [...data.strikes].sort(
@@ -52,26 +54,53 @@ export default function InterpretationPanel({ data, expirationFilter }: Props) {
       if (!force && key === lastKeyRef.current) return;
       lastKeyRef.current = key;
 
+      // Cancel any stream still writing for a previous symbol/filter
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setLoading(true);
       setError(null);
+      setInterpretation("");
+      let first = true;
       try {
-        const result = await fetchInterpretation(buildRequest());
-        setInterpretation(result.interpretation);
+        await streamInterpretation(
+          buildRequest(),
+          (chunk) => {
+            if (controller.signal.aborted) return;
+            if (first) {
+              first = false;
+              setLoading(false); // swap skeleton for live text on the first token
+              setStreaming(true);
+            }
+            setInterpretation((prev) => (prev ?? "") + chunk);
+          },
+          controller.signal
+        );
       } catch (err: any) {
+        if (controller.signal.aborted) return; // superseded, not an error
         // Clear the key so the next data change retries instead of being deduped
         lastKeyRef.current = "";
+        setInterpretation(null);
         setError(err.message || "Failed to generate analysis");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setStreaming(false);
+        }
       }
     },
     [data, expirationFilter, buildRequest]
   );
 
-  // Auto-generate on data change
+  // Auto-generate whenever the profile changes; the key check inside generate()
+  // dedupes re-renders that don't change symbol/filter/regime/flip.
   useEffect(() => {
     generate();
-  }, [data.symbol, expirationFilter, data.regime.type]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, expirationFilter]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   return (
     <div className="card overflow-hidden">
@@ -83,13 +112,19 @@ export default function InterpretationPanel({ data, expirationFilter }: Props) {
           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20">
             AI-powered
           </span>
+          {(loading || streaming) && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-fg-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+              {streaming ? "Writing…" : "Thinking…"}
+            </span>
+          )}
         </div>
         <button
           onClick={() => generate(true)}
-          disabled={loading}
-          className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--bg-elevated)] border border-white/[0.06] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+          disabled={loading || streaming}
+          className="btn"
         >
-          {loading ? "Analyzing..." : "Refresh Analysis"}
+          {loading || streaming ? "Analyzing…" : "Refresh Analysis"}
         </button>
       </div>
 
@@ -119,13 +154,16 @@ export default function InterpretationPanel({ data, expirationFilter }: Props) {
         )}
 
         {interpretation && (
-          <div className={`space-y-4 ${loading ? "opacity-50" : ""}`}>
-            {interpretation.split("\n\n").map((para, i) => (
-              <p
-                key={i}
-                className="text-sm leading-relaxed text-fg-2"
-              >
+          <div className="space-y-4">
+            {interpretation.split("\n\n").map((para, i, all) => (
+              <p key={i} className="text-sm leading-relaxed text-fg-2">
                 {para}
+                {streaming && i === all.length - 1 && (
+                  <span
+                    aria-hidden
+                    className="inline-block w-[2px] h-[1em] ml-0.5 align-[-0.15em] bg-accent animate-pulse"
+                  />
+                )}
               </p>
             ))}
           </div>

@@ -37,6 +37,8 @@ export default function Dashboard() {
   const [symbol, setSymbol] = useState("SPY");
   const [filter, setFilter] = useState<ExpirationFilter>("all");
   const [data, setData] = useState<GexResponse | null>(null);
+  // The filter that produced `data` — `filter` can be ahead of it while a fetch is in flight
+  const [loadedFilter, setLoadedFilter] = useState<ExpirationFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,6 +101,7 @@ export default function Dashboard() {
     try {
       const result = await fetchGex(symbol, filter);
       setData(result);
+      setLoadedFilter(filter);
     } catch (err: any) {
       setError(err.message || "Failed to load GEX data");
       setData(null); // never show a stale symbol's chart under an error
@@ -210,7 +213,7 @@ export default function Dashboard() {
             {comparison && <ComparisonSummary comparison={comparison} />}
 
             <div className="grid lg:grid-cols-2 gap-4 items-start">
-              <InterpretationPanel data={data} expirationFilter={filter} />
+              <InterpretationPanel data={data} expirationFilter={loadedFilter} />
               <ScenarioExplorer data={data} />
             </div>
 

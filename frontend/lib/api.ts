@@ -80,6 +80,54 @@ export interface InterpretResponse {
   cached: boolean;
 }
 
+/**
+ * Stream the interpretation as it is generated. `onDelta` receives each text chunk;
+ * resolves with {cached} when the server sends its done event. Pass an AbortSignal
+ * to cancel (e.g. when the symbol changes mid-stream).
+ */
+export async function streamInterpretation(
+  req: InterpretRequest,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal
+): Promise<{ cached: boolean }> {
+  const res = await fetch(`${API_URL}/api/interpret/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `API error: ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let cached = false;
+
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    const ev = JSON.parse(line) as { delta?: string; done?: boolean; cached?: boolean; error?: string };
+    if (ev.error) throw new Error(ev.error);
+    if (ev.delta) onDelta(ev.delta);
+    if (ev.done) cached = !!ev.cached;
+  };
+
+  // NDJSON: split on newlines, keep any partial trailing line in the buffer
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    lines.forEach(handle);
+  }
+  buffer += decoder.decode();
+  if (buffer) handle(buffer);
+  return { cached };
+}
+
 export async function fetchInterpretation(
   req: InterpretRequest
 ): Promise<InterpretResponse> {
