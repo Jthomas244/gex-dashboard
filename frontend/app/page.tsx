@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { GexResponse, ExpirationFilter } from "@/lib/types";
-import { fetchGex, fetchHealth, saveSnapshot, ComparisonData, SchwabTokenStatus } from "@/lib/api";
+import { fetchGex, fetchHealth, saveSnapshot, isDemo, ComparisonData, SchwabTokenStatus } from "@/lib/api";
 import TopBar from "@/components/TopBar";
 import RegimeIndicator from "@/components/RegimeIndicator";
 import GexBarChart from "@/components/GexBarChart";
@@ -150,6 +150,28 @@ export default function Dashboard() {
           onTutorial={() => setTutorialOpen(true)}
           tokenStatus={tokenStatus}
         />
+
+        {isDemo && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-accent/25 bg-accent/[0.06] px-4 py-3 text-[13px] animate-fade-in">
+            <span className="mt-0.5 w-5 h-5 rounded-md bg-accent/15 text-accent flex items-center justify-center text-[11px] font-bold flex-shrink-0">
+              i
+            </span>
+            <p className="text-fg-2 leading-relaxed">
+              <span className="text-fg font-medium">Demo build.</span> This is a static SPY sample chain with a
+              pre-generated analysis, so the UI and the GEX 101 tutorial work without a backend. Live Schwab data,
+              other symbols, what-if questions, and historical comparison need the full app —{" "}
+              <a
+                href="https://github.com/Jthomas244/gex-dashboard"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+              >
+                source on GitHub
+              </a>
+              .
+            </p>
+          </div>
+        )}
 
         {/* Secondary toolbar */}
         <div className="mb-4">

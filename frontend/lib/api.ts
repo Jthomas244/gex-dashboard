@@ -2,6 +2,17 @@ import { GexResponse, ExpirationFilter } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * Demo mode (NEXT_PUBLIC_DEMO=1, set in .env.production for the public Vercel build):
+ * no backend. GEX profiles and analyses come from static JSON in /public/demo,
+ * generated from the sample chain. Live-only features degrade with a clear message.
+ */
+export const isDemo = process.env.NEXT_PUBLIC_DEMO === "1";
+
+const DEMO_ONLY_SYMBOL = "SPY";
+const demoUnavailable = (feature: string) =>
+  new Error(`${feature} needs the live backend. This demo ships a static SPY sample chain — clone the repo and run it locally with Schwab credentials for live data.`);
+
 export interface SchwabTokenStatus {
   state: "ok" | "expiring" | "expired" | "unknown";
   issued_at: string | null;
@@ -16,6 +27,7 @@ export interface HealthResponse {
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
+  if (isDemo) return { status: "ok", data_source: "sample" };
   const res = await fetch(`${API_URL}/api/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   return res.json();
@@ -25,6 +37,12 @@ export async function fetchGex(
   symbol: string,
   expirationFilter: ExpirationFilter = "all"
 ): Promise<GexResponse> {
+  if (isDemo) {
+    if (symbol.toUpperCase() !== DEMO_ONLY_SYMBOL) throw demoUnavailable(`${symbol.toUpperCase()} data`);
+    const res = await fetch(`/demo/gex/SPY-${expirationFilter}.json`);
+    if (!res.ok) throw new Error(`Demo fixture missing: ${expirationFilter}`);
+    return res.json();
+  }
   const params = new URLSearchParams({ expiration_filter: expirationFilter });
   const res = await fetch(
     `${API_URL}/api/gex/${encodeURIComponent(symbol)}?${params}`
@@ -90,6 +108,18 @@ export async function streamInterpretation(
   onDelta: (text: string) => void,
   signal?: AbortSignal
 ): Promise<{ cached: boolean }> {
+  if (isDemo) {
+    const res = await fetch(`/demo/interpret/SPY-${req.expiration_filter}.json`, { signal });
+    if (!res.ok) throw new Error("Demo fixture missing");
+    const { interpretation } = (await res.json()) as InterpretResponse;
+    // Replay in small chunks so the panel behaves as it does against the live stream
+    for (const piece of interpretation.match(/\S+\s*/g) ?? []) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      onDelta(piece);
+      await new Promise((r) => setTimeout(r, 18));
+    }
+    return { cached: true };
+  }
   const res = await fetch(`${API_URL}/api/interpret/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -162,6 +192,7 @@ export interface ScenarioResponse {
 export async function fetchScenario(
   req: ScenarioRequest
 ): Promise<ScenarioResponse> {
+  if (isDemo) throw demoUnavailable("Asking what-if questions");
   const res = await fetch(`${API_URL}/api/scenario`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -177,6 +208,7 @@ export async function fetchScenario(
 export async function fetchHistoryDates(
   symbol: string
 ): Promise<{ symbol: string; dates: string[] }> {
+  if (isDemo) return { symbol, dates: [] };
   const res = await fetch(
     `${API_URL}/api/gex/${encodeURIComponent(symbol)}/history`
   );
@@ -215,6 +247,7 @@ export async function fetchComparison(
   symbol: string,
   date: string
 ): Promise<ComparisonData> {
+  if (isDemo) throw demoUnavailable("Historical comparison");
   const params = new URLSearchParams({ date });
   const res = await fetch(
     `${API_URL}/api/gex/${encodeURIComponent(symbol)}/compare?${params}`
@@ -227,6 +260,7 @@ export async function fetchComparison(
 }
 
 export async function saveSnapshot(symbol: string): Promise<void> {
+  if (isDemo) return;
   await fetch(`${API_URL}/api/gex/${encodeURIComponent(symbol)}/snapshot`, {
     method: "POST",
   });

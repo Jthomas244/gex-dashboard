@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { GexResponse } from "@/lib/types";
-import { streamInterpretation, InterpretRequest } from "@/lib/api";
+import { streamInterpretation, isDemo, InterpretRequest } from "@/lib/api";
 
 interface Props {
   data: GexResponse;
@@ -110,7 +110,7 @@ export default function InterpretationPanel({ data, expirationFilter }: Props) {
             Market Structure Analysis
           </h3>
           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20">
-            AI-powered
+            {isDemo ? "Pre-generated sample" : "AI-powered"}
           </span>
           {(loading || streaming) && (
             <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-fg-3">

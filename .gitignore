@@ -28,3 +28,6 @@ build/
 
 # SQLite history database
 backend/app/data/gex_history.db
+
+# Vercel
+.vercel/
