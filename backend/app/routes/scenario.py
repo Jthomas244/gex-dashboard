@@ -64,7 +64,7 @@ User's question: {req.question}"""
     try:
         client = Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
-            model="claude-opus-5",
+            model="claude-sonnet-5",
             max_tokens=1000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
